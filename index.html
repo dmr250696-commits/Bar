@@ -515,7 +515,32 @@ function lockManager(){
 }
 
 /* ═══════════ CLIENT ═══════════ */
-document.getElementById('client-pin-input').addEventListener('keyup',e=>{ if(e.key==='Enter') clientLogin(); });
+// Gestionnaire d'erreur global — affiche l'erreur à l'écran si l'app crashe
+window.addEventListener('error', function(e){
+  const msg = `Erreur JS : ${e.message}\nFichier : ${e.filename}\nLigne : ${e.lineno}`;
+  console.error(msg);
+  // Affiche un bandeau d'erreur visible sur la tablette
+  const div = document.createElement('div');
+  div.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#8A6A6A;color:white;padding:16px;font-family:monospace;font-size:13px;z-index:9999;white-space:pre-wrap;';
+  div.textContent = msg;
+  document.body.appendChild(div);
+});
+
+document.addEventListener('DOMContentLoaded', function(){
+  const pinInput = document.getElementById('client-pin-input');
+  if(pinInput) pinInput.addEventListener('keyup', e=>{ if(e.key==='Enter') clientLogin(); });
+
+  const adminInput = document.getElementById('admin-pass-input');
+  if(adminInput) adminInput.addEventListener('keyup', e=>{ if(e.key==='Enter') adminLogin(); });
+
+  const managerInput = document.getElementById('manager-pass-input');
+  if(managerInput) managerInput.addEventListener('keyup', e=>{ if(e.key==='Enter') managerLogin(); });
+
+  ['client-pin-input','firstsetup-pin','firstsetup-pin2','changepin-new','changepin-confirm'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,6); });
+  });
+});
 
 function clientLogin(){
   const pin=document.getElementById('client-pin-input').value.trim();
@@ -689,7 +714,6 @@ function confirmPurchase(){
 }
 
 /* ═══════════ ADMIN ═══════════ */
-document.getElementById('admin-pass-input').addEventListener('keyup',e=>{ if(e.key==='Enter') adminLogin(); });
 function adminLogin(){
   const pass=document.getElementById('admin-pass-input').value;
   const err=document.getElementById('admin-login-error');
@@ -821,7 +845,6 @@ function exportClientHistoryPDF(){
 }
 
 /* ═══════════ GESTIONNAIRE ═══════════ */
-document.getElementById('manager-pass-input').addEventListener('keyup',e=>{ if(e.key==='Enter') managerLogin(); });
 function managerLogin(){
   const pass=document.getElementById('manager-pass-input').value;
   const err=document.getElementById('manager-login-error');
@@ -1313,12 +1336,6 @@ function resetStaffIdleTimer(){ clearTimeout(staffIdleTimer); staffIdleTimer=set
   document.addEventListener(evt,()=>{ resetClientIdleTimer(); resetStaffIdleTimer(); });
 });
 resetStaffIdleTimer();
-
-// Saisie uniquement numérique sur les champs PIN
-['client-pin-input','firstsetup-pin','firstsetup-pin2','changepin-new','changepin-confirm'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el) el.addEventListener('input',e=>{ e.target.value=e.target.value.replace(/\D/g,'').slice(0,6); });
-});
 </script>
 </body>
 </html>
