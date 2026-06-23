@@ -6,7 +6,7 @@
    de la première navigation avec connexion.
    ========================================================= */
 
-const CACHE_NAME = 'bar-esme-v2';
+const CACHE_NAME = 'bar-esme-v3';
 
 /* ---------- Installation : on met en cache uniquement index.html ---------- */
 self.addEventListener('install', (event) => {
