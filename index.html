@@ -480,12 +480,15 @@ let purchaseCtx = null;
 let addBalanceCtx = null;
 let editProductCtx = null;
 
+// Compatible toutes versions Android (structuredClone n'existe pas sur Android < 2022)
+function deepClone(obj){ return JSON.parse(JSON.stringify(obj)); }
+
 function loadDB(){
   try{
     const raw = localStorage.getItem('comptoir_db');
-    if(!raw) return structuredClone(DEFAULT_DATA);
-    return Object.assign(structuredClone(DEFAULT_DATA), JSON.parse(raw));
-  }catch(e){ return structuredClone(DEFAULT_DATA); }
+    if(!raw) return deepClone(DEFAULT_DATA);
+    return Object.assign(deepClone(DEFAULT_DATA), JSON.parse(raw));
+  }catch(e){ return deepClone(DEFAULT_DATA); }
 }
 function saveDB(){ localStorage.setItem('comptoir_db', JSON.stringify(DB)); }
 function uid(p){ return p+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
@@ -498,7 +501,8 @@ function showToast(msg, isError){
 
 /* ── Navigation ── */
 function switchTab(tab){
-  const prev = document.querySelector('.tab-btn.active')?.dataset.tab;
+  const activeBtn = document.querySelector('.tab-btn.active');
+  const prev = activeBtn ? activeBtn.dataset.tab : null;
   if(prev==='admin' && prev!==tab) lockAdmin();
   if(prev==='manager' && prev!==tab) lockManager();
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
@@ -1228,7 +1232,7 @@ function importBackup(event){
       const parsed=JSON.parse(e.target.result);
       if(!parsed.clients||!parsed.products) throw new Error();
       if(!confirm('Charger cette sauvegarde remplacera toutes les données actuelles. Continuer ?')) return;
-      DB=Object.assign(structuredClone(DEFAULT_DATA),parsed);
+      DB=Object.assign(deepClone(DEFAULT_DATA),parsed);
       saveDB(); renderManagerDashboard(); showToast('Sauvegarde chargée avec succès.');
     }catch(err){ showToast('Fichier de sauvegarde invalide.',true); }
   };
