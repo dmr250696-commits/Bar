@@ -266,6 +266,11 @@ footer.app-foot{text-align:center; padding:16px; font-family:var(--mono); font-s
         </div>
 
         <div class="panel">
+          <div class="modal-title" style="margin-bottom:14px;">Historique des recharges</div>
+          <div id="admin-recharges-table"></div>
+        </div>
+
+        <div class="panel">
           <div class="modal-title" style="margin-bottom:14px;">Changer le mot de passe administrateur</div>
           <div class="field-row">
             <div class="field"><label>Nouveau mot de passe</label><input type="password" id="admin-newpass" placeholder="Nouveau mot de passe"></div>
@@ -310,6 +315,10 @@ footer.app-foot{text-align:center; padding:16px; font-family:var(--mono); font-s
             <div class="field"><label>Prix (€)</label><input type="number" id="new-product-price" placeholder="0.00" step="0.1" min="0"></div>
             <div class="field"><label>Stock initial</label><input type="number" id="new-product-stock" placeholder="0" min="0"></div>
             <div class="field"><label>Seuil alerte stock</label><input type="number" id="new-product-threshold" placeholder="5" min="1" value="5"></div>
+          </div>
+          <div class="field" style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+            <input type="checkbox" id="new-product-unlimited" style="width:auto;width:18px;height:18px;cursor:pointer;">
+            <label for="new-product-unlimited" style="margin-bottom:0;cursor:pointer;text-transform:none;font-size:13px;letter-spacing:0;">Quantité illimitée (ex : café) — ne compte pas dans la valeur du stock</label>
           </div>
           <button class="btn btn-primary" onclick="createProduct()">Ajouter au stock</button>
           <div class="error-msg" id="new-product-error"></div>
@@ -422,6 +431,10 @@ footer.app-foot{text-align:center; padding:16px; font-family:var(--mono); font-s
       <div class="field"><label>Prix (€)</label><input type="number" id="edit-product-price" step="0.1" min="0"></div>
       <div class="field"><label>Stock</label><input type="number" id="edit-product-stock" min="0"></div>
       <div class="field"><label>Seuil alerte</label><input type="number" id="edit-product-threshold" min="1"></div>
+    </div>
+    <div class="field" style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <input type="checkbox" id="edit-product-unlimited" style="width:18px;height:18px;cursor:pointer;">
+      <label for="edit-product-unlimited" style="margin-bottom:0;cursor:pointer;text-transform:none;font-size:13px;letter-spacing:0;">Quantité illimitée — ne compte pas dans la valeur du stock</label>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeEditProductModal()">Annuler</button>
@@ -620,13 +633,12 @@ function renderProductGrid(category, gridId){
     grid.innerHTML = '<div class="empty-state">Aucun produit pour le moment.</div>';
     return;
   }
-  // Vider la grille
   grid.innerHTML = '';
   items.forEach(function(p){
-    var out = p.stock <= 0;
+    var out = !p.unlimited && p.stock <= 0;
     var broke = currentClient.balance < p.price;
     var dis = out || broke;
-    var low = p.stock > 0 && p.stock < (p.threshold || 5);
+    var low = !p.unlimited && p.stock > 0 && p.stock < (p.threshold || 5);
 
     var btn = document.createElement('button');
     btn.className = 'product-card' + (dis ? ' disabled' : '');
@@ -659,7 +671,7 @@ function renderProductGrid(category, gridId){
 
     var stock = document.createElement('span');
     stock.className = 'product-stock' + (low ? ' low' : '');
-    stock.textContent = p.stock + ' en stock';
+    stock.textContent = p.unlimited ? '∞' : (p.stock + ' en stock');
     meta.appendChild(stock);
 
     btn.appendChild(meta);
@@ -677,24 +689,31 @@ function renderProductGrid(category, gridId){
 function renderClientHistory(){
   const container=document.getElementById('client-history');
   const now=new Date();
-  const sales=DB.history.filter(h=>{
+  const entries=DB.history.filter(h=>{
     const d=new Date(h.date);
     return h.clientId===currentClient.id && d.getFullYear()===now.getFullYear() && d.getMonth()===now.getMonth();
   }).sort((a,b)=>new Date(b.date)-new Date(a.date));
-  if(sales.length===0){ container.innerHTML='<div class="empty-state">Aucune consommation ce mois-ci.</div>'; return; }
-  const total=sales.reduce((s,h)=>s+h.total,0);
+  if(entries.length===0){ container.innerHTML='<div class="empty-state">Aucune consommation ce mois-ci.</div>'; return; }
+  const totalConso=entries.filter(h=>h.productName!=='__recharge__').reduce((s,h)=>s+h.total,0);
   container.innerHTML=`
     <div class="history-list">
-      ${sales.map(h=>`
-        <div class="history-item">
+      ${entries.map(h=>{
+        const isRecharge = h.productName==='__recharge__';
+        const label = isRecharge ? 'Recharge' : `${escapeHtml(h.productName)} × ${h.qty}`;
+        const amount = isRecharge
+          ? `<span style="color:var(--sage);font-family:var(--mono);font-size:14px;font-weight:600;">+${euro(h.total)}</span>`
+          : `<span class="history-item-amount">−${euro(h.total)}</span>`;
+        const date = new Date(h.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+        return `<div class="history-item">
           <div>
-            <div class="history-item-name">${escapeHtml(h.productName)} × ${h.qty}</div>
-            <div class="history-item-meta">${new Date(h.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+            <div class="history-item-name">${label}</div>
+            <div class="history-item-meta">${date}</div>
           </div>
-          <div class="history-item-amount">−${euro(h.total)}</div>
-        </div>`).join('')}
+          ${amount}
+        </div>`;
+      }).join('')}
       <div style="text-align:right;font-family:var(--mono);font-size:12px;color:var(--paper-dim);padding:8px 4px;">
-        Total du mois : <strong style="color:var(--brick-bright)">${euro(total)}</strong>
+        Total consommé ce mois : <strong style="color:var(--brick-bright)">${euro(totalConso)}</strong>
       </div>
     </div>`;
 }
@@ -725,7 +744,7 @@ function openPurchaseModal(productId){
   const p=DB.products.find(x=>x.id===productId); if(!p) return;
   purchaseCtx={product:p,qty:1};
   document.getElementById('purchase-modal-title').textContent=p.name;
-  document.getElementById('purchase-modal-sub').textContent=`${euro(p.price)} / unité · ${p.stock} en stock`;
+  document.getElementById('purchase-modal-sub').textContent=`${euro(p.price)} / unité · ${p.unlimited ? '∞ disponible' : p.stock + ' en stock'}`;
   document.getElementById('purchase-error').textContent='';
   updatePurchaseModalUI();
   document.getElementById('purchase-modal').classList.add('active');
@@ -750,9 +769,9 @@ function confirmPurchase(){
   const err=document.getElementById('purchase-error');
   const fp=DB.products.find(p=>p.id===product.id);
   const fc=DB.clients.find(c=>c.id===currentClient.id);
-  if(!fp||fp.stock<qty){ err.textContent='Stock insuffisant.'; return; }
+  if(!fp||((!fp.unlimited)&&fp.stock<qty)){ err.textContent='Stock insuffisant.'; return; }
   if(fc.balance<total){ err.textContent='Solde insuffisant.'; return; }
-  fp.stock-=qty;
+  if(!fp.unlimited) fp.stock-=qty;
   fc.balance=+(fc.balance-total).toFixed(2);
   DB.history.push({id:uid('h'),clientId:fc.id,productId:fp.id,productName:fp.name,qty,unitPrice:product.price,total,date:new Date().toISOString()});
   saveDB(); closePurchaseModal(); renderClientDashboard();
@@ -768,6 +787,7 @@ function adminLogin(){
   document.getElementById('admin-login').style.display='none';
   document.getElementById('admin-dashboard').style.display='block';
   renderAdminClients();
+  renderAdminRecharges();
 }
 function adminLogout(){ document.getElementById('admin-dashboard').style.display='none'; document.getElementById('admin-login').style.display='flex'; }
 
@@ -904,25 +924,57 @@ function deleteClient(id){
 }
 
 function openAddBalanceModal(clientId){
-  const c=DB.clients.find(x=>x.id===clientId); if(!c) return;
-  addBalanceCtx=clientId;
-  document.getElementById('addbalance-sub').textContent=`${c.firstName} ${c.lastName} — solde : ${euro(c.balance)}`;
-  document.getElementById('addbalance-amount').value='';
-  document.getElementById('addbalance-error').textContent='';
+  var c = DB.clients.find(function(x){ return x.id === clientId; });
+  if(!c) return;
+  addBalanceCtx = clientId;
+  document.getElementById('addbalance-sub').textContent = c.firstName + ' ' + c.lastName + ' — solde : ' + euro(c.balance);
+  document.getElementById('addbalance-amount').value = '';
+  document.getElementById('addbalance-error').textContent = '';
   document.getElementById('addbalance-modal').classList.add('active');
 }
-function closeAddBalanceModal(){ document.getElementById('addbalance-modal').classList.remove('active'); addBalanceCtx=null; }
+function closeAddBalanceModal(){
+  document.getElementById('addbalance-modal').classList.remove('active');
+  addBalanceCtx = null;
+}
 function confirmAddBalance(){
-  const amount=parseFloat(document.getElementById('addbalance-amount').value);
-  const err=document.getElementById('addbalance-error');
-  if(isNaN(amount)||amount<=0){ err.textContent='Entrez un montant valide.'; return; }
-  const c=DB.clients.find(x=>x.id===addBalanceCtx);
-  const before=c.balance;
-  c.balance=+(c.balance+amount).toFixed(2);
-  // Log recharge dans history avec type spécial
-  DB.history.push({id:uid('r'),clientId:c.id,productId:null,productName:'__recharge__',qty:1,unitPrice:amount,total:amount,date:new Date().toISOString()});
-  saveDB(); closeAddBalanceModal(); renderAdminClients();
-  showToast(`${euro(amount)} ajoutés à ${c.firstName} ${c.lastName}.`);
+  var amount = parseFloat(document.getElementById('addbalance-amount').value);
+  var err = document.getElementById('addbalance-error');
+  if(isNaN(amount) || amount <= 0){ err.textContent = 'Entrez un montant valide.'; return; }
+  var c = DB.clients.find(function(x){ return x.id === addBalanceCtx; });
+  if(!c){ err.textContent = 'Client introuvable.'; return; }
+  c.balance = +(c.balance + amount).toFixed(2);
+  DB.history.push({id:uid('r'), clientId:c.id, productId:null, productName:'__recharge__', qty:1, unitPrice:amount, total:amount, date:new Date().toISOString()});
+  saveDB();
+  closeAddBalanceModal();
+  renderAdminClients();
+  renderAdminRecharges();
+  showToast(euro(amount) + ' ajoutés à ' + c.firstName + ' ' + c.lastName + '.');
+}
+
+/* ── Historique des recharges ── */
+function renderAdminRecharges(){
+  const container = document.getElementById('admin-recharges-table');
+  if(!container) return;
+  const recharges = DB.history
+    .filter(h => h.productName === '__recharge__')
+    .sort((a,b) => new Date(b.date) - new Date(a.date));
+  if(recharges.length === 0){
+    container.innerHTML = '<div class="empty-state">Aucune recharge enregistrée.</div>';
+    return;
+  }
+  container.innerHTML = `<table class="data-table">
+    <thead><tr><th>Client</th><th>Montant ajouté</th><th>Date</th></tr></thead>
+    <tbody>${recharges.map(h => {
+      const c = DB.clients.find(x => x.id === h.clientId);
+      const name = c ? escapeHtml(`${c.firstName} ${c.lastName}`) : 'Client supprimé';
+      const date = new Date(h.date).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+      return `<tr>
+        <td><strong>${name}</strong></td>
+        <td class="mono-val" style="color:var(--sage);">+${euro(h.total)}</td>
+        <td class="mono-val">${date}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
 }
 
 /* ── Ardoise d'un client (modal) ── */
@@ -981,9 +1033,9 @@ function changeManagerPassword(){
 function renderManagerDashboard(){ renderManagerStats(); renderManagerStock(); renderSalesHistory('month'); }
 
 function renderManagerStats(){
-  const sv=DB.products.reduce((s,p)=>s+p.price*p.stock,0);
+  const sv=DB.products.reduce((s,p)=>s+(p.unlimited?0:p.price*p.stock),0);
   const cb=DB.clients.reduce((s,c)=>s+c.balance,0);
-  const low=DB.products.filter(p=>p.stock<(p.threshold||5)).length;
+  const low=DB.products.filter(p=>!p.unlimited&&p.stock<(p.threshold||5)).length;
   const now=new Date();
   const mSales=DB.history.filter(h=>{ const d=new Date(h.date); return h.productName!=='__recharge__'&&d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth(); }).reduce((s,h)=>s+h.total,0);
   document.getElementById('manager-stats').innerHTML=`
@@ -995,7 +1047,7 @@ function renderManagerStats(){
 }
 
 function checkLowStockAlert(){
-  const low=DB.products.filter(p=>p.stock<(p.threshold||5));
+  const low=DB.products.filter(p=>!p.unlimited&&p.stock<(p.threshold||5));
   const el=document.getElementById('manager-low-stock-alert');
   if(low.length===0){ el.innerHTML=''; return; }
   el.innerHTML=`<div class="alert-banner"><strong>⚠ ${low.length} produit(s) en stock bas</strong>${low.map(p=>`${escapeHtml(p.name)} : ${p.stock} restant(s) (seuil : ${p.threshold||5})`).join('<br>')}</div>`;
@@ -1013,12 +1065,12 @@ function renderManagerStock(){
 
   sorted.forEach(function(p){
     var threshold = p.threshold || 5;
-    var isLow = p.stock < threshold;
+    var isLow = !p.unlimited && p.stock < threshold;
     var tr = document.createElement('tr');
     if(isLow) tr.className = 'low-stock';
 
     var tdName = document.createElement('td');
-    tdName.innerHTML = '<strong>' + escapeHtml(p.name) + '</strong>';
+    tdName.innerHTML = '<strong>' + escapeHtml(p.name) + '</strong>' + (p.unlimited ? ' <span class="tag" style="background:rgba(156,168,156,0.15);color:var(--sage);">∞</span>' : '');
     tr.appendChild(tdName);
 
     var tdCat = document.createElement('td');
@@ -1032,13 +1084,13 @@ function renderManagerStock(){
 
     var tdStock = document.createElement('td');
     tdStock.className = 'mono-val';
-    tdStock.textContent = p.stock;
+    tdStock.textContent = p.unlimited ? '∞' : p.stock;
     if(isLow){ tdStock.style.color = 'var(--brick-bright)'; tdStock.style.fontWeight = '700'; }
     tr.appendChild(tdStock);
 
     var tdThreshold = document.createElement('td');
     tdThreshold.className = 'mono-val';
-    tdThreshold.textContent = threshold;
+    tdThreshold.textContent = p.unlimited ? '—' : threshold;
     tr.appendChild(tdThreshold);
 
     var tdActions = document.createElement('td');
@@ -1106,18 +1158,20 @@ function createProduct(){
   const name=document.getElementById('new-product-name').value.trim();
   const cat=document.getElementById('new-product-cat').value;
   const price=parseFloat(document.getElementById('new-product-price').value);
-  const stock=parseInt(document.getElementById('new-product-stock').value);
+  const stock=parseInt(document.getElementById('new-product-stock').value||'0');
   const threshold=parseInt(document.getElementById('new-product-threshold').value||'5');
+  const unlimited=document.getElementById('new-product-unlimited').checked;
   const err=document.getElementById('new-product-error'); err.textContent='';
   if(!name){ err.textContent='Nom du produit requis.'; return; }
   if(isNaN(price)||price<0){ err.textContent='Prix invalide.'; return; }
-  if(isNaN(stock)||stock<0){ err.textContent='Stock invalide.'; return; }
-  DB.products.push({id:uid('p'),name,category:cat,price:+price.toFixed(2),stock:Math.floor(stock),threshold:Math.max(1,threshold||5)});
+  if(!unlimited&&isNaN(stock)){ err.textContent='Stock invalide.'; return; }
+  DB.products.push({id:uid('p'),name,category:cat,price:+price.toFixed(2),stock:unlimited?0:Math.floor(stock),threshold:Math.max(1,threshold||5),unlimited:unlimited});
   saveDB();
   document.getElementById('new-product-name').value='';
   document.getElementById('new-product-price').value='';
   document.getElementById('new-product-stock').value='';
   document.getElementById('new-product-threshold').value='5';
+  document.getElementById('new-product-unlimited').checked=false;
   renderManagerDashboard(); checkLowStockAlert();
   showToast('Produit ajouté au stock.');
 }
@@ -1134,6 +1188,7 @@ function openEditProductModal(id){
   document.getElementById('edit-product-price').value=p.price;
   document.getElementById('edit-product-stock').value=p.stock;
   document.getElementById('edit-product-threshold').value=p.threshold||5;
+  document.getElementById('edit-product-unlimited').checked=!!p.unlimited;
   document.getElementById('editproduct-error').textContent='';
   document.getElementById('editproduct-modal').classList.add('active');
 }
@@ -1143,12 +1198,13 @@ function confirmEditProduct(){
   const price=parseFloat(document.getElementById('edit-product-price').value);
   const stock=parseInt(document.getElementById('edit-product-stock').value);
   const threshold=parseInt(document.getElementById('edit-product-threshold').value||'5');
+  const unlimited=document.getElementById('edit-product-unlimited').checked;
   const err=document.getElementById('editproduct-error');
   if(!name){ err.textContent='Nom requis.'; return; }
   if(isNaN(price)||price<0){ err.textContent='Prix invalide.'; return; }
-  if(isNaN(stock)||stock<0){ err.textContent='Stock invalide.'; return; }
+  if(!unlimited&&isNaN(stock)){ err.textContent='Stock invalide.'; return; }
   const p=DB.products.find(x=>x.id===editProductCtx);
-  p.name=name; p.price=+price.toFixed(2); p.stock=Math.floor(stock); p.threshold=Math.max(1,threshold||5);
+  p.name=name; p.price=+price.toFixed(2); p.stock=unlimited?0:Math.floor(stock); p.threshold=Math.max(1,threshold||5); p.unlimited=unlimited;
   saveDB(); closeEditProductModal(); renderManagerDashboard(); checkLowStockAlert();
   showToast('Produit mis à jour.');
 }
@@ -1172,8 +1228,8 @@ function exportStockPDF(){
   let total=0;
   [...DB.products].sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name)).forEach(p=>{
     if(y>270){doc.addPage();y=20;}
-    const v=p.price*p.stock; total+=v;
-    doc.text(p.name,14,y); doc.text(p.category,90,y); doc.text(euro(p.price),130,y); doc.text(String(p.stock),155,y); doc.text(euro(v),178,y);
+    const v=p.unlimited?0:p.price*p.stock; total+=v;
+    doc.text(p.name,14,y); doc.text(p.category,90,y); doc.text(euro(p.price),130,y); doc.text(p.unlimited?'∞':String(p.stock),155,y); doc.text(p.unlimited?'—':euro(v),178,y);
     y+=7;
   });
   y+=4; doc.line(14,y,196,y); y+=8;
@@ -1267,8 +1323,8 @@ function exportMonthlyPDF(){
   let stockTotal=0;
   [...DB.products].sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name)).forEach(p=>{
     if(y>270){doc.addPage();y=20;}
-    const v=p.price*p.stock; stockTotal+=v;
-    doc.text(p.name,14,y); doc.text(p.category,80,y); doc.text(euro(p.price),120,y); doc.text(String(p.stock),145,y); doc.text(euro(v),170,y);
+    const v=p.unlimited?0:p.price*p.stock; stockTotal+=v;
+    doc.text(p.name,14,y); doc.text(p.category,80,y); doc.text(euro(p.price),120,y); doc.text(p.unlimited?'∞':String(p.stock),145,y); doc.text(p.unlimited?'—':euro(v),170,y);
     y+=6;
   });
   y+=3; doc.line(14,y,196,y); y+=7;
@@ -1502,3 +1558,4 @@ resetStaffIdleTimer();
 </script>
 </body>
 </html>
+  
