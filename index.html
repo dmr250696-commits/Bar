@@ -613,23 +613,65 @@ function renderClientDashboard(){
   renderClientHistory();
 }
 
-function renderProductGrid(category,gridId){
-  const grid=document.getElementById(gridId);
-  const items=DB.products.filter(p=>p.category===category);
-  if(items.length===0){ grid.innerHTML='<div class="empty-state">Aucun produit pour le moment.</div>'; return; }
-  grid.innerHTML=items.map(p=>{
-    const out=p.stock<=0, broke=currentClient.balance<p.price, dis=out||broke;
-    const low=p.stock>0&&p.stock<(p.threshold||5);
-    return `<button class="product-card ${dis?'disabled':''}" ${dis?'disabled':''} onclick="openPurchaseModal('${p.id}')">
-      ${out?'<span class="stock-badge">RUPTURE</span>':''}
-      <div class="product-cat">${category}</div>
-      <div class="product-name">${escapeHtml(p.name)}</div>
-      <div class="product-meta">
-        <span class="product-price">${euro(p.price)}</span>
-        <span class="product-stock ${low?'low':''}">${p.stock} en stock</span>
-      </div>
-    </button>`;
-  }).join('');
+function renderProductGrid(category, gridId){
+  var grid = document.getElementById(gridId);
+  var items = DB.products.filter(function(p){ return p.category === category; });
+  if(items.length === 0){
+    grid.innerHTML = '<div class="empty-state">Aucun produit pour le moment.</div>';
+    return;
+  }
+  // Vider la grille
+  grid.innerHTML = '';
+  items.forEach(function(p){
+    var out = p.stock <= 0;
+    var broke = currentClient.balance < p.price;
+    var dis = out || broke;
+    var low = p.stock > 0 && p.stock < (p.threshold || 5);
+
+    var btn = document.createElement('button');
+    btn.className = 'product-card' + (dis ? ' disabled' : '');
+    btn.disabled = dis;
+
+    if(out){
+      var badge = document.createElement('span');
+      badge.className = 'stock-badge';
+      badge.textContent = 'RUPTURE';
+      btn.appendChild(badge);
+    }
+
+    var cat = document.createElement('div');
+    cat.className = 'product-cat';
+    cat.textContent = category;
+    btn.appendChild(cat);
+
+    var name = document.createElement('div');
+    name.className = 'product-name';
+    name.textContent = p.name;
+    btn.appendChild(name);
+
+    var meta = document.createElement('div');
+    meta.className = 'product-meta';
+
+    var price = document.createElement('span');
+    price.className = 'product-price';
+    price.textContent = euro(p.price);
+    meta.appendChild(price);
+
+    var stock = document.createElement('span');
+    stock.className = 'product-stock' + (low ? ' low' : '');
+    stock.textContent = p.stock + ' en stock';
+    meta.appendChild(stock);
+
+    btn.appendChild(meta);
+
+    if(!dis){
+      (function(pid){
+        btn.addEventListener('click', function(){ openPurchaseModal(pid); });
+      })(p.id);
+    }
+
+    grid.appendChild(btn);
+  });
 }
 
 function renderClientHistory(){
@@ -758,33 +800,96 @@ function createClient(){
 }
 
 function renderAdminClients(){
-  const search=(document.getElementById('admin-search').value||'').toLowerCase();
-  const container=document.getElementById('admin-clients-table');
-  let clients=[...DB.clients].sort((a,b)=>`${a.lastName}${a.firstName}`.localeCompare(`${b.lastName}${b.firstName}`));
-  if(search) clients=clients.filter(c=>`${c.firstName} ${c.lastName}`.toLowerCase().includes(search));
-  if(clients.length===0){ container.innerHTML='<div class="empty-state">Aucun client trouvé.</div>'; return; }
+  var search = (document.getElementById('admin-search').value || '').toLowerCase();
+  var container = document.getElementById('admin-clients-table');
+  var clients = DB.clients.slice().sort(function(a,b){ return (a.lastName+a.firstName).localeCompare(b.lastName+b.firstName); });
+  if(search) clients = clients.filter(function(c){ return (c.firstName+' '+c.lastName).toLowerCase().indexOf(search) !== -1; });
+  if(clients.length === 0){ container.innerHTML = '<div class="empty-state">Aucun client trouvé.</div>'; return; }
 
-  // Calcul consommation du mois pour chaque client
-  const now=new Date();
-  const monthSpend={};
-  DB.history.filter(h=>{ const d=new Date(h.date); return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth(); }).forEach(h=>{ monthSpend[h.clientId]=(monthSpend[h.clientId]||0)+h.total; });
+  var now = new Date();
+  var monthSpend = {};
+  DB.history.forEach(function(h){
+    var d = new Date(h.date);
+    if(d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()){
+      monthSpend[h.clientId] = (monthSpend[h.clientId] || 0) + h.total;
+    }
+  });
 
-  container.innerHTML=`<table class="data-table">
-    <thead><tr><th>Client</th><th>Code</th><th>Solde</th><th>Ce mois</th><th>Créé le</th><th></th></tr></thead>
-    <tbody>${clients.map(c=>`<tr>
-      <td><strong>${escapeHtml(c.firstName)} ${escapeHtml(c.lastName)}</strong></td>
-      <td>${c.pin?'<span class="tag">défini</span>':'<span class="tag warn">en attente</span>'}</td>
-      <td class="mono-val">${euro(c.balance)}</td>
-      <td class="mono-val">${euro(monthSpend[c.id]||0)}</td>
-      <td class="mono-val">${new Date(c.createdAt).toLocaleDateString('fr-FR')}</td>
-      <td class="row-actions">
-        <button class="icon-btn" title="Ajouter du solde" onclick="openAddBalanceModal('${c.id}')">+€</button>
-        <button class="icon-btn" title="Historique / Ardoise" onclick="openClientHistoryModal('${c.id}')">📋</button>
-        ${c.pin?`<button class="icon-btn" title="Réinitialiser le code" onclick="resetClientPin('${c.id}')">⟲</button>`:''}
-        <button class="icon-btn danger" title="Supprimer" onclick="deleteClient('${c.id}')">✕</button>
-      </td>
-    </tr>`).join('')}</tbody>
-  </table>`;
+  var table = document.createElement('table');
+  table.className = 'data-table';
+  table.innerHTML = '<thead><tr><th>Client</th><th>Code</th><th>Solde</th><th>Ce mois</th><th>Créé le</th><th></th></tr></thead>';
+  var tbody = document.createElement('tbody');
+
+  clients.forEach(function(c){
+    var tr = document.createElement('tr');
+
+    var tdName = document.createElement('td');
+    tdName.innerHTML = '<strong>' + escapeHtml(c.firstName) + ' ' + escapeHtml(c.lastName) + '</strong>';
+    tr.appendChild(tdName);
+
+    var tdCode = document.createElement('td');
+    tdCode.innerHTML = c.pin ? '<span class="tag">défini</span>' : '<span class="tag warn">en attente</span>';
+    tr.appendChild(tdCode);
+
+    var tdBal = document.createElement('td');
+    tdBal.className = 'mono-val';
+    tdBal.textContent = euro(c.balance);
+    tr.appendChild(tdBal);
+
+    var tdMonth = document.createElement('td');
+    tdMonth.className = 'mono-val';
+    tdMonth.textContent = euro(monthSpend[c.id] || 0);
+    tr.appendChild(tdMonth);
+
+    var tdDate = document.createElement('td');
+    tdDate.className = 'mono-val';
+    tdDate.textContent = new Date(c.createdAt).toLocaleDateString('fr-FR');
+    tr.appendChild(tdDate);
+
+    var tdActions = document.createElement('td');
+    tdActions.className = 'row-actions';
+
+    // Bouton +€
+    var btnAdd = document.createElement('button');
+    btnAdd.className = 'icon-btn';
+    btnAdd.title = 'Ajouter du solde';
+    btnAdd.textContent = '+€';
+    (function(id){ btnAdd.addEventListener('click', function(){ openAddBalanceModal(id); }); })(c.id);
+    tdActions.appendChild(btnAdd);
+
+    // Bouton ardoise
+    var btnHist = document.createElement('button');
+    btnHist.className = 'icon-btn';
+    btnHist.title = 'Ardoise';
+    btnHist.textContent = '📋';
+    (function(id){ btnHist.addEventListener('click', function(){ openClientHistoryModal(id); }); })(c.id);
+    tdActions.appendChild(btnHist);
+
+    // Bouton reset PIN
+    if(c.pin){
+      var btnReset = document.createElement('button');
+      btnReset.className = 'icon-btn';
+      btnReset.title = 'Réinitialiser le code';
+      btnReset.textContent = '⟲';
+      (function(id){ btnReset.addEventListener('click', function(){ resetClientPin(id); }); })(c.id);
+      tdActions.appendChild(btnReset);
+    }
+
+    // Bouton supprimer
+    var btnDel = document.createElement('button');
+    btnDel.className = 'icon-btn danger';
+    btnDel.title = 'Supprimer';
+    btnDel.textContent = '✕';
+    (function(id){ btnDel.addEventListener('click', function(){ deleteClient(id); }); })(c.id);
+    tdActions.appendChild(btnDel);
+
+    tr.appendChild(tdActions);
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  container.innerHTML = '';
+  container.appendChild(table);
 }
 
 function resetClientPin(id){
@@ -897,23 +1002,69 @@ function checkLowStockAlert(){
 }
 
 function renderManagerStock(){
-  const container=document.getElementById('manager-stock-table');
-  if(DB.products.length===0){ container.innerHTML='<div class="empty-state">Aucun produit. Ajoutez-en un ci-dessus.</div>'; return; }
-  const sorted=[...DB.products].sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name));
-  container.innerHTML=`<table class="data-table">
-    <thead><tr><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Stock</th><th>Seuil</th><th></th></tr></thead>
-    <tbody>${sorted.map(p=>`<tr class="${p.stock<(p.threshold||5)?'low-stock':''}">
-      <td><strong>${escapeHtml(p.name)}</strong></td>
-      <td><span class="tag">${p.category}</span></td>
-      <td class="mono-val">${euro(p.price)}</td>
-      <td class="mono-val" style="${p.stock<(p.threshold||5)?'color:var(--brick-bright);font-weight:700;':''}">${p.stock}</td>
-      <td class="mono-val">${p.threshold||5}</td>
-      <td class="row-actions">
-        <button class="icon-btn" title="Modifier" onclick="openEditProductModal('${p.id}')">✎</button>
-        <button class="icon-btn danger" title="Supprimer" onclick="deleteProduct('${p.id}')">✕</button>
-      </td>
-    </tr>`).join('')}</tbody>
-  </table>`;
+  var container = document.getElementById('manager-stock-table');
+  if(DB.products.length === 0){ container.innerHTML = '<div class="empty-state">Aucun produit. Ajoutez-en un ci-dessus.</div>'; return; }
+  var sorted = DB.products.slice().sort(function(a,b){ return a.category.localeCompare(b.category) || a.name.localeCompare(b.name); });
+
+  var table = document.createElement('table');
+  table.className = 'data-table';
+  table.innerHTML = '<thead><tr><th>Produit</th><th>Catégorie</th><th>Prix</th><th>Stock</th><th>Seuil</th><th></th></tr></thead>';
+  var tbody = document.createElement('tbody');
+
+  sorted.forEach(function(p){
+    var threshold = p.threshold || 5;
+    var isLow = p.stock < threshold;
+    var tr = document.createElement('tr');
+    if(isLow) tr.className = 'low-stock';
+
+    var tdName = document.createElement('td');
+    tdName.innerHTML = '<strong>' + escapeHtml(p.name) + '</strong>';
+    tr.appendChild(tdName);
+
+    var tdCat = document.createElement('td');
+    tdCat.innerHTML = '<span class="tag">' + p.category + '</span>';
+    tr.appendChild(tdCat);
+
+    var tdPrice = document.createElement('td');
+    tdPrice.className = 'mono-val';
+    tdPrice.textContent = euro(p.price);
+    tr.appendChild(tdPrice);
+
+    var tdStock = document.createElement('td');
+    tdStock.className = 'mono-val';
+    tdStock.textContent = p.stock;
+    if(isLow){ tdStock.style.color = 'var(--brick-bright)'; tdStock.style.fontWeight = '700'; }
+    tr.appendChild(tdStock);
+
+    var tdThreshold = document.createElement('td');
+    tdThreshold.className = 'mono-val';
+    tdThreshold.textContent = threshold;
+    tr.appendChild(tdThreshold);
+
+    var tdActions = document.createElement('td');
+    tdActions.className = 'row-actions';
+
+    var btnEdit = document.createElement('button');
+    btnEdit.className = 'icon-btn';
+    btnEdit.title = 'Modifier';
+    btnEdit.textContent = '✎';
+    (function(id){ btnEdit.addEventListener('click', function(){ openEditProductModal(id); }); })(p.id);
+    tdActions.appendChild(btnEdit);
+
+    var btnDel = document.createElement('button');
+    btnDel.className = 'icon-btn danger';
+    btnDel.title = 'Supprimer';
+    btnDel.textContent = '✕';
+    (function(id){ btnDel.addEventListener('click', function(){ deleteProduct(id); }); })(p.id);
+    tdActions.appendChild(btnDel);
+
+    tr.appendChild(tdActions);
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  container.innerHTML = '';
+  container.appendChild(table);
 }
 
 function renderSalesHistory(filter){
