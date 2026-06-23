@@ -209,8 +209,11 @@ footer.app-foot{text-align:center; padding:16px; font-family:var(--mono); font-s
               <div class="client-since" id="client-meta">—</div>
             </div>
           </div>
-          <div class="balance-slate">
-            <div class="balance-amount" id="client-balance">0,00 €</div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:12px;">
+            <button class="logout-btn" onclick="clientLogout()">Se déconnecter</button>
+            <div class="balance-slate">
+              <div class="balance-amount" id="client-balance">0,00 €</div>
+            </div>
           </div>
         </div>
 
@@ -225,7 +228,6 @@ footer.app-foot{text-align:center; padding:16px; font-family:var(--mono); font-s
 
         <div style="margin-top:32px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
           <button class="logout-btn" onclick="openChangePinModal()">Changer mon code</button>
-          <button class="logout-btn" onclick="clientLogout()">Se déconnecter</button>
         </div>
       </div>
     </div>
@@ -1558,4 +1560,3 @@ resetStaffIdleTimer();
 </script>
 </body>
 </html>
-  
